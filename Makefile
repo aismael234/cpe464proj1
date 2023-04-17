@@ -4,7 +4,7 @@
 
 CC = gcc
 LIBS = -lpcap
-CFLAGS = -g -Wall -pedantic 
+CFLAGS = -g -Wall -pedantic -std=gnu99
 #CGLAGS = 
 
 all:  trace
