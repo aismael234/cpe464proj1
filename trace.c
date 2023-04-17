@@ -49,12 +49,6 @@ int main(int argc, char *argv[]) {
         return FILEEX;
     }
 
-    /*
-
-    int pcap_next_ex(pcap_t *p, struct pcap_pkthdr **pkt_header, const u_char **pkt_data);
-
-    */
-
     struct pcap_pkthdr* pkt_header;
     const unsigned char* pkt_data;
 
@@ -73,16 +67,18 @@ int main(int argc, char *argv[]) {
 
     // read every pcap file
     while((res = pcap_next_ex(save_file, &pkt_header, &pkt_data)) == 1) {
-        int type = extractEthernetHeader(pkt_data, pkt_number, pkt_header);
+        int internet_type = extractEthernetHeader(pkt_data, pkt_number, pkt_header);
         int offset;
         // if IP Header
-        if(type == IP) {
+        if(internet_type == IP) {
             offset = extractIPHeader(pkt_data, pkt_header);
         }
         // if ARP Header
-        if(type == ARP) {
-
+        if(internet_type == ARP) {
+            
         }
+
+
         pkt_number++;
 
     }
@@ -145,7 +141,28 @@ int extractIPHeader(const unsigned char* pkt_data, struct pcap_pkthdr* pkt_heade
     printf("\t\tTTL: %d\n", pkt_data[cursor + 8]);
     printf("\t\tIP PDU Len: %d (bytes)\n", pkt_data[cursor + 3]);
     printf("\t\tProtocol: %s\n", protocol);
-    
+
+    if(in_cksum((unsigned short *) &pkt_data[cursor + 10], 2) == 0) {
+        printf("\t\tChecksum: Correct (0x%x%x)\n", pkt_data[cursor + 11], pkt_data[cursor + 10]);
+    }
+    else
+        printf("\t\tChecksum: Incorrect (0x%x%x)\n", pkt_data[cursor + 11], pkt_data[cursor + 10]);
+
+    printf("\t\tSender IP: ");
+    for(int i = cursor + 12; i < cursor + 16; i++) {
+        if(i < cursor + 15)
+            printf("%d.",pkt_data[i]);
+        else 
+            printf("%d\n",pkt_data[i]);
+    }
+
+    printf("\t\tDest IP: ");
+    for(int i = cursor + 16; i < cursor + 20; i++) {
+        if(i < cursor + 19)
+            printf("%d.",pkt_data[i]);
+        else 
+            printf("%d\n\n",pkt_data[i]);
+    }
 
     return header_length;
 }
