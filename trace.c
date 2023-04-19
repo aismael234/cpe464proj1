@@ -40,6 +40,7 @@ void extractTCPHeader(const unsigned char* pkt_data, struct pcap_pkthdr* pkt_hea
 
 char* getTransportProtocol(unsigned char value);
 int isValidIPChecksum(const unsigned char* pkt_data, int header_length, int cursor);
+int isValidTCPChecksum(const unsigned char* pkt_data, int header_length, int cursor);
 
 int main(int argc, char *argv[]) {
 
@@ -128,12 +129,14 @@ int extractEthernetHeader(const unsigned char* pkt_data, struct pcap_pkthdr* pkt
     char* type;
     if(type_value == IP) {
         type = "IP";
+        printf("\t\tType: %s\n\n", type);
     }
     else if(type_value == ARP) {
         type = "ARP";
+        printf("\t\tType: %s\n\n", type);
     }
-        
-    printf("\t\tType: %s\n\n", type);
+    else
+        printf("\t\tType: Not Supported\n\n");
 
     return type_value;
 }
@@ -284,7 +287,17 @@ void extractTCPHeader(const unsigned char* pkt_data, struct pcap_pkthdr* pkt_hea
     printf("\t\tWindow Size: %hu\n", window_size);
     
     // TCP pseudoheader checksum
-
+    int res = isValidTCPChecksum(pkt_data, pkt_header->len, cursor);
+    if(res == 0) {
+        unsigned short checksum;
+        memcpy(&checksum, &pkt_data[cursor + 16], 2);
+        printf("\t\tChecksum: Correct (0x%x)\n", checksum);
+    }
+    else {
+        unsigned short checksum;
+        memcpy(&checksum, &pkt_data[cursor + 16], 2);
+        printf("\t\tChecksum: Incorrect (0x%x)\n", checksum);
+    }
 
 }
 
@@ -312,22 +325,47 @@ int isValidIPChecksum(const unsigned char* pkt_data, int header_length, int curs
 }
 
 // Checks if TCP header checksum is valid. returns 0 on true, anything else on false.
-int isValidTCPChecksum(const unsigned char* pkt_data, int header_length, int cursor) {
-    // copy header data
-    unsigned char* checksum_buff = malloc(sizeof(unsigned char) * header_length);
-    memcpy(checksum_buff, &pkt_data[cursor], header_length);
+int isValidTCPChecksum(const unsigned char* pkt_data, int packet_length, int cursor) {
 
     // find length needed for checksum buffer
     int length;
     // pseudo-header
-    length = 96;
+    length = 12;
     // tcp header length
-    length += (pkt_data[cursor + 12] & 0x0F) * 4;
-    // tcp checksum
-    
-    
+    //length += (pkt_data[cursor + 12] & 0x0F) * 4;
+    // tcp data
+    // packet size
+    length += (packet_length);
+    // - IP header size
+    int ip_header_length = (pkt_data[ETH_HEADER_LENGTH] & 0x0F) * 4;
+    length -= (ip_header_length + ETH_HEADER_LENGTH);
+    unsigned char* checksum_buff = malloc(sizeof(unsigned char) * length);
 
-    int result = in_cksum((unsigned short*) checksum_buff, header_length);
+    // get src and dest addresses
+    memcpy(&checksum_buff[0], &pkt_data[26], 8);
+    // reserved
+    memset(&checksum_buff[8], 0, 1);
+    // protocol
+    memcpy(&checksum_buff[9], &pkt_data[23], 1);
+    unsigned short tcp_payload_length = packet_length - ((pkt_data[cursor + 12] & 0xF0) / 16) * 4 - ip_header_length - ETH_HEADER_LENGTH;
+    // tcp payload length
+    memcpy(&checksum_buff[10], &tcp_payload_length, 2);
+    // tcp header + data
+    memcpy(&checksum_buff[12], &pkt_data[cursor], tcp_payload_length + ((pkt_data[cursor + 12] & 0xF0) / 16) * 4);
+    //memset(&checksum_buff[12 + cursor + 16], 0, 2);
+
+    int result = in_cksum((unsigned short*) checksum_buff, length);
+
+    printf("size: ");
+    int what = 0;
+    for(int i = 0; i < length; i++) {
+        printf("%x ", checksum_buff[i]);
+        what++;
+    }
+    printf("\n%d\n", what);
+
+    printf("\n(0x%x)\n", result);
+
 
     free(checksum_buff);
     return result;
